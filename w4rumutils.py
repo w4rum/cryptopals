@@ -94,9 +94,10 @@ def singleXorCrack(crypt):
             bestKey = i
     return [best, bestKey, highscore]
 
-def vigenereCrack(crypt, keysizeMax=40, keysizeTolerance=4):
+def vigenereCrack(crypt, keysizeMax=40, keysizeTolerance=4, keysizes=None):
     #print(hexlify(crypt))
-    keysizes = vigenereFindKeysizes(crypt, keysizeMax, keysizeTolerance)
+    if keysizes == None:
+        keysizes = vigenereFindKeysizes(crypt, keysizeMax, keysizeTolerance)
     #keysizes= [x for x in range(28,40)]
     results = []
     for ks in keysizes:
@@ -318,3 +319,33 @@ def paddingOracle(oracle, crypt, iv, blocksize=16):
                     #print("WRONG")
     return b''.join(known)
 
+def aesCtr(text, key, nonce=0):
+    blocks = stripeBytes(text, 16)
+    output = bytearray()
+    counter = 0
+    for b in blocks:
+        keystream = aesEcbEncrypt(struct.pack('<Q', nonce) + struct.pack('<Q', counter), key)
+        output += xor(b, keystream)
+        counter += 1
+    return bytes(output)
+
+def cribDrag(crypts, crib, targetCrypt=0):
+    targetCrypt = 0
+    for i in range(len(crypts[targetCrypt])):
+        keystream = xor(crypts[targetCrypt][i:i+len(crib)], crib)
+        res = []
+        for j, cr in enumerate(crypts):
+            if j == targetCrypt:
+                res.append([targetCrypt, crib])
+                continue
+            res.append([j, xor(cr[i:i+len(crib)], keystream)])
+
+        valid = True
+        for r in res:
+            for c in r[1]:
+                if chr(c) not in string.printable:
+                    valid = False
+        if valid:
+            print('Offset: ' + str(i))
+            for i, s in res:
+                print(str(i) + ': ' + s.decode())
