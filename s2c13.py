@@ -2,6 +2,32 @@ from w4rumutils import *
 import string
 import sys
 
+def parseUserString(s):
+    attr = [x.split('=') for x in s.split('&')]
+    return attr
+
+def toUserString(user):
+    return '&'.join(['%s=%s' % (k, v) for k, v in user])
+
+def genUser(email):
+    email = email.replace('&','').replace('=','')
+    user = [
+            ['email', email],
+            ['uid', 10],
+            ['role', 'user']]
+    return user
+
+def profile_for(email):
+    user = genUser(email)
+    return toUserString(user)
+
+userEncKey = b'\x0f \x93\x12\xcf\x043\xd5_-\x9c\x1e\x03\xafJ\x84'
+def encUser(userString):
+    return aesEcbEncrypt(userString.encode(), userEncKey)
+
+def decUser(cryptUserString):
+    return parseUserString(aesEcbDecrypt(cryptUserString, userEncKey).decode())
+
 # email=... 6 symbols, 10 symbols short to full block
 email  = 'A'*10
 # payload on own block

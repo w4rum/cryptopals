@@ -29,7 +29,7 @@ def hammingDist(b1, b2):
     return diff
 
 def scoreEnglish(b):
-    # unigram frequency of english texts, alphabetical order
+    # unigram frequency of english texts
     freq = [0] * 256
     freq[ord('a')] = 	0.08167
     freq[ord('b')] = 	0.01492
@@ -78,7 +78,6 @@ def scoreEnglish(b):
     # see https://stackoverflow.com/questions/15710292/how-to-compute-letter-frequency-similarity
     # and https://stackoverflow.com/questions/18424228/cosine-similarity-between-2-number-lists#18424933
     score = 1 - spatial.distance.cosine(freq, freqCur)
-
     return score
 
 def singleXorCrack(crypt):
@@ -95,10 +94,8 @@ def singleXorCrack(crypt):
     return [best, bestKey, highscore]
 
 def vigenereCrack(crypt, keysizeMax=40, keysizeTolerance=4, keysizes=None):
-    #print(hexlify(crypt))
     if keysizes == None:
         keysizes = vigenereFindKeysizes(crypt, keysizeMax, keysizeTolerance)
-    #keysizes= [x for x in range(28,40)]
     results = []
     for ks in keysizes:
         blocks = stripeBytes(crypt, ks)
@@ -106,18 +103,13 @@ def vigenereCrack(crypt, keysizeMax=40, keysizeTolerance=4, keysizes=None):
         key = []
         for b in tr:
             crackRes = singleXorCrack(b)
-            #print('%d, %f, %s' % (crackRes[1], crackRes[2], crackRes[0]))
             key.append(crackRes[1])
-        #print('KS %d: %s' % (ks, functools.reduce(lambda x, y: x + chr(y), key, '')))
         results.append([xor(crypt, key), key])
-    #print(xor(crypt, b'X'))
     return results 
-        
 
 def vigenereFindKeysizes(crypt, keysizeMax, keysizeTolerance, chunksToConsider=10):
-    # find probable keysizes
-    # by taking average hamming distance over first 10 (default) blocks of brute-forced
-    # size
+    # find probable keysizes by taking average hamming distance
+    # over first 10 (default) blocks of brute-forced size
     keysizes = []
     for i in range (2, keysizeMax):
         dist = 0
@@ -194,19 +186,6 @@ def unpad(b, size=16):
     else:
         raise ValueError('incorrect padding!')
 
-def aesRandomEncrypt(plain):
-    key = os.urandom(16) 
-    prefix = os.urandom(randint(5,10))
-    suffix = os.urandom(randint(5,10))
-    plain = prefix + plain + suffix
-    if randint(0,1) == 1:
-        print('ECB')
-        return aesEcbEncrypt(plain, key)
-    else:
-        print('CBC')
-        iv = os.urandom(16)
-        return aesCbcEncrypt(plain, key, iv)
-
 def detectEcb(crypt):
     blocks = stripeBytes(crypt, 16)
     s = set()
@@ -226,63 +205,26 @@ def buildDict(func, pre, known, block, blocksize, blockOffset=0):
     for c in range(256):
         c = chr(c)
         plain = pre + known + c.encode()
-        #print(plain)
         crypt = func(plain)[offset:offset+blocksize*block-1]
-        #print(crypt)
         d.update({crypt: c})
     return d
 
 def ecbCrack(func, blocksize=16, blockOffset=0):
     blockCount = ceil(len(func(b'')) / blocksize) - blockOffset
-    #print('blockCount='+str(blockCount))
     offset = blocksize*blockOffset
     known = bytearray()
     for bl in range(1, blockCount+1):
         for i in range(1, blocksize+1):
             pre = b'A'*(blocksize-i)
             d = buildDict(func, pre, known, bl, blocksize, blockOffset)
-            #print(d)
-            #return
             crypt = func(pre)
-            #print(crypt)
             try:
                 newChar = d[crypt[offset:offset+blocksize*bl-1]]
             except KeyError:
                 return bytes(known)
-            #print(newChar)
             known.extend(newChar.encode())
-            #print(known)
-
-def parseUserString(s):
-    attr = [x.split('=') for x in s.split('&')]
-    return attr
-
-def toUserString(user):
-    return '&'.join(['%s=%s' % (k, v) for k, v in user])
-
-def genUser(email):
-    email = email.replace('&','').replace('=','')
-    user = [
-            ['email', email],
-            ['uid', 10],
-            ['role', 'user']]
-    return user
-
-def profile_for(email):
-    user = genUser(email)
-    return toUserString(user)
-
-userEncKey = b'\x0f \x93\x12\xcf\x043\xd5_-\x9c\x1e\x03\xafJ\x84'
-def encUser(userString):
-    return aesEcbEncrypt(userString.encode(), userEncKey)
-
-def decUser(cryptUserString):
-    return parseUserString(aesEcbDecrypt(cryptUserString, userEncKey).decode())
 
 def bitflip(src, target, known):
-    #print('src=' + hexlify(src).decode())
-    #print('tar=' + hexlify(target).decode())
-    #print('kwn=' + known.__str__())
     assert len(src) == len(target) == len(known)
     diff = xor(target, known)
     return xor(src, diff)
@@ -293,30 +235,15 @@ def paddingOracle(oracle, crypt, iv, blocksize=16):
     known = [b''] * (len(blocks) - 1)
     for i in reversed(range(1, len(blocks)-0)):
         for ic in range(blocksize):
-            #print(len(blocks))
-            #print(len(crypt))
-            #input('')
-            #print('known=')
-            #print(known)
             for guess in range(256):
-                #if guess == 1:
-                #    continue
                 curBlock = blocks[i]
                 prevBlock = blocks[i-1]
-                #print('i=' + str(i))
-                #print('ic=' + str(ic))
-                #print('curBlock=' + hexlify(curBlock).decode())
-                #print('crypt=' + hexlify(crypt).decode())
-                #print('guess=' + hex(guess))
                 target = curBlock[:blocksize-1-ic] + bytes([ic+1]) * (ic+1)
                 knownBlock = curBlock[:blocksize-1-ic] + bytes([guess]) + known[i-1]
                 moddedBlock = bitflip(prevBlock, target, knownBlock)
                 if oracle(b''.join([moddedBlock, curBlock])) and not (guess == 1 and ic == 0):
                     known[i-1] = bytes([guess]) + known[i-1]
-                    #print("RIGHT")
                     break
-                #else:
-                    #print("WRONG")
     return b''.join(known)
 
 def aesCtr(text, key, nonce=0):
